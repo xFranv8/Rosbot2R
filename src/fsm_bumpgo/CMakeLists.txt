@@ -9,6 +9,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(rclcpp REQUIRED)
+
 
 set(dependencies
   rclcpp
@@ -19,7 +21,7 @@ set(dependencies
 include_directories(include)
 
 add_executable(bumpgo
-  src/fsm_bumpgo/BumpGoNode.qt_wrap_cpp
+  src/fsm_bumpgo/BumpGoNode.cpp
   src/bumpgo_main.cpp
 )
 
