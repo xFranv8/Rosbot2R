@@ -3,8 +3,8 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 
 def generate_launch_description():
-    bumpgo_cmd = Node(package="fsm_bump_go_cpp",
-                      executable="bumpgo",
+    bumpgo_cmd = Node(package="save_data",
+                      executable="save_data",
                       output="screen",
                       remappings=[
                         ("input_scan", "/scan"),
