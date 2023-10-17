@@ -82,7 +82,6 @@ public:
 
 private:
     int server_port;
-    int serverSocket;
     int clientSock;
     sockaddr_in serverAddress{};
     sockaddr_in clientAddr;

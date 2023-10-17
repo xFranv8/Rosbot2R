@@ -7,6 +7,7 @@
 #include "geometry_msgs/msg/twist.hpp"
 
 #include "rclcpp/rclcpp.hpp"
+#include <cmath>
 
 namespace fsm_bumpgo {
 using namespace std::chrono_literals;
@@ -17,7 +18,7 @@ BumpGoNode::BumpGoNode() : Node("bump_go"), state_(FORWARD) {
         "input_scan", rclcpp::SensorDataQoS(), 
         std::bind(&BumpGoNode::scan_callback, this, _1));
     
-    vel_pub_ =create_publisher<geometry_msgs::msg::Twist>("output_vel", 10);
+    vel_pub_ = create_publisher<geometry_msgs::msg::Twist>("output_vel", 10);
     timer_ = create_wall_timer(50ms, std::bind(&BumpGoNode::control_cycle, this));
 
     state_ts_ = now();
@@ -44,22 +45,14 @@ void BumpGoNode::control_cycle(){
                 go_state(STOP);
             }
 
-            if (check_forward_2_back()) {
-                go_state(BACK);
-            }
-
-            break;
-
-        case BACK:
-            out_vel.linear.x = -SPEED_LINEAR;
-
-            if (check_back_2_turn()) {
+            if (check_forward_2_turn()) {
                 go_state(TURN);
             }
 
             break;
         
         case TURN:
+            this->turning_time_ = rclcpp::Duration::from_seconds(get_time_open_cycle(last_scan_->ranges) + 1.0);
             out_vel.angular.z = SPEED_ANGULAR;
 
             if (check_turn_2_forward()) {
@@ -86,10 +79,12 @@ void BumpGoNode::go_state(int new_state) {
 }
 
 
-bool BumpGoNode::check_forward_2_back() {
-    size_t pos = last_scan_->ranges.size() / 2;
+bool BumpGoNode::check_forward_2_turn() {
+    std::vector<float> ranges = last_scan_->ranges;
+    
+    this->frontal_distance_ = ranges[0];
 
-    return last_scan_->ranges[pos] < OBSTACLE_DISTANCE;
+    return this->frontal_distance_ < OBSTACLE_DISTANCE;
 }
 
 
@@ -107,17 +102,28 @@ bool BumpGoNode::check_stop_2_forward() {
 }
 
 
-bool BumpGoNode::check_back_2_turn() {
-    auto elapsed = now() - state_ts_;
-
-    return elapsed > BACKING_TIME;
-}
-
-
 bool BumpGoNode::check_turn_2_forward() {
     auto elapsed = now() - state_ts_;
 
-    return elapsed > TURNING_TIME;
+    return elapsed > turning_time_;
+}
+
+
+float BumpGoNode::get_time_open_cycle(std::vector<float> ranges){
+    float angle = 0;
+
+    for (long unsigned int i = 0; i < ranges.size(); i++) {
+        if (std::isinf(ranges[i])) {
+            angle = i * last_scan_->angle_increment;
+
+            RCLCPP_INFO_STREAM(rclcpp::get_logger("rclcpp"), "Index: " << i << "\n");
+            RCLCPP_INFO_STREAM(rclcpp::get_logger("rclcpp"), "Turning angle: " << angle << "\n");
+            RCLCPP_INFO_STREAM(rclcpp::get_logger("rclcpp"), "Distance: " << ranges[i] << "\n");
+            break;
+        }
+    }
+
+    return angle / SPEED_ANGULAR;
 }
 
 } // namespace fsm_bumpgo

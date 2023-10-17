@@ -22,32 +22,34 @@ private:
     void control_cycle();
 
     static const int FORWARD = 0;
-    static const int BACK = 1;
-    static const int TURN = 2;
-    static const int STOP = 3;
+    static const int TURN = 1;
+    static const int STOP = 2;
     int state_;
     rclcpp::Time state_ts_;
 
     void go_state(int new_state);
-    bool check_forward_2_back();
+    bool check_forward_2_turn();
     bool check_forward_2_stop();
-    bool check_back_2_turn();
     bool check_turn_2_forward();
     bool check_stop_2_forward();
+    float get_time_open_cycle(std::vector<float> ranges);
 
-    const rclcpp::Duration TURNING_TIME {2s};
-    const rclcpp::Duration BACKING_TIME {2s};
-    const rclcpp::Duration  SCAN_TIMEOUT {1s};
-
+    
+    const rclcpp::Duration SCAN_TIMEOUT {1s};
+    rclcpp::Duration turning_time_ {2s};
+    
     static constexpr float SPEED_LINEAR = 0.35f;
     static constexpr float SPEED_ANGULAR = 0.35f;
-    static constexpr float OBSTACLE_DISTANCE = 1.0f;
+    static constexpr float OBSTACLE_DISTANCE = 0.8f;
 
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr vel_pub_;
     rclcpp::TimerBase::SharedPtr timer_;
 
     sensor_msgs::msg::LaserScan::UniquePtr last_scan_;
+    float frontal_distance_;
+    float left_distance_;
+    float right_distance_;
 };
 
 }
