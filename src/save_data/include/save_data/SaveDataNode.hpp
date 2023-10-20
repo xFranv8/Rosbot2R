@@ -31,6 +31,7 @@ private:
     void send_imu_data(const sensor_msgs::msg::Imu::ConstSharedPtr msg);
 
     void send_cmd(std::vector<float> cmd);
+    void send_with_len(std::string data);
     
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>SharedPtr lidar_scan_sub_;
     image_transport::Subscriber image_sub_;

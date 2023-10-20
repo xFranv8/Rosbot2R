@@ -17,39 +17,49 @@ def receive_data():
     client_socket, client_address = server_socket.accept()
     print('Connected to', client_address)
 
-    # Initialize buffer to store received data
-    buffer = b''
-
-    i: int = 0
-    # Loop to receive data until the entire image is received
     while True:
-        data = client_socket.recv(1024)
-        if not data:
-            break
-        buffer += data
+        try:
+            # Read v
+            message_len = struct.unpack('!I', client_socket.recv(4))[0]
+            data = client_socket.recv(message_len)
+            v = struct.unpack('dd', data)
+            print(f"Command: {v}")
 
-        # Check if the received data completes the image
-        if buffer[-2:] == b'\xff\xd9':
-            # Convert the received data back to a cv2 image
-            image_array = np.frombuffer(buffer, dtype=np.uint8)
+            # Read image
+            message_len = struct.unpack('!I', client_socket.recv(4))[0]
+            data = client_socket.recv(message_len)
+
+            print(message_len)
+
+            image_array = np.frombuffer(data, dtype=np.uint8)
             image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
-            # Process or display the received image
             cv2.imshow('Received Image', image)
             cv2.waitKey(1)
 
-            # TODO: Change video path every time you use this script
-            cv2.imwrite(f"video1/frame{i}.png", image)
-            i += 1
+            # Read lidar
+            message_len = struct.unpack('!I', client_socket.recv(4))[0]
+            data = client_socket.recv(message_len)
+            lidar = data.decode('utf-8')
+            print(f"Lidar: {lidar}")
 
-            # Clear the buffer for the next image
-            buffer = b''
+            # Read imu
+            message_len = struct.unpack('!I', client_socket.recv(4))[0]
+            data = client_socket.recv(message_len)
+            imu = data.decode('utf-8')
+            print(f"IMU: {imu}")
+
+        except Exception as e:
+            print(e)
+            continue
+
+        time.sleep(0.05)
 
     cv2.destroyAllWindows()
 
     # Close the socket connections
-    # client_socket.close()
-    server_socket.close()
+    client_socket.close()
+    # server_socket.close()
 
 
 def send_data():

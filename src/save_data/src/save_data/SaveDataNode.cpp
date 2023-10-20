@@ -14,6 +14,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <string.h>
+#include <iostream>
+#include <cstring>
+
 namespace save_data {
 using namespace std::chrono_literals;
 using std::placeholders::_1;
@@ -116,14 +120,25 @@ void SaveDataNode::send_lidar_data(sensor_msgs::msg::LaserScan::UniquePtr msg){
     data += std::to_string(angle_min) + ",";
     data += std::to_string(angle_max);
 
-    send(this->socket_fd, data.c_str(), data.size(), 0);
+    this->send_with_len(data);
+
+    // send(this->socket_fd, data.c_str(), data.size(), 0);
 }
 
 void SaveDataNode::send_camera_data(cv::Mat image){
     std::vector<uchar> jpeg_data;
     cv::imencode(".jpg", image, jpeg_data);
 
-    send(this->socket_fd, jpeg_data.data(), jpeg_data.size(), 0);
+    uint32_t image_len = hton1(jpeg_data.size());
+    uint32_t network_image_len = htonl(image_len);
+
+    char buffer[4 + image_len];
+    memcpy(buffer, &network_image_len, sizeof(network_image_len));
+    memcpy(buffer + sizeof(network_image_len), jpeg_data.data(), image_len);
+
+    send(this->socket_fd, buffer, sizeof(buffer), 0);
+
+    // send(this->socket_fd, jpeg_data.data(), jpeg_data.size(), 0);
 }
 
 void SaveDataNode::send_imu_data(const sensor_msgs::msg::Imu::ConstSharedPtr msg){
@@ -146,7 +161,9 @@ void SaveDataNode::send_imu_data(const sensor_msgs::msg::Imu::ConstSharedPtr msg
     data += std::to_string(msg->linear_acceleration.y) + ",";
     data += std::to_string(msg->linear_acceleration.z) + ",";
 
-    send(this->socket_fd, data.c_str(), data.size(), 0);
+    this->send_with_len(data);
+
+    // send(this->socket_fd, data.c_str(), data.size(), 0);
 }
 
 void SaveDataNode::send_cmd(std::vector<float> cmd){
@@ -158,6 +175,16 @@ void SaveDataNode::send_cmd(std::vector<float> cmd){
     RCLCPP_ERROR(get_logger(), "Angular: ", motor_msg->angular.z, "\n");
 
     this->publisher_->publish(*motor_msg);
+}
+
+void send_with_len(std::string data){
+    uint32_t data_len = hton1(data.size());
+
+    char buffer[4 + data.size()];
+    memcpy(buffer, &data_len, sizeof(data_len));
+    memcpy(buffer + sizeof(data_len), data.c_str(), data.size());
+
+    send(this->socket_fd, buffer, sizeof(buffer), 0);
 }
 
 void SaveDataNode::control_cycle(){
@@ -178,7 +205,12 @@ void SaveDataNode::control_cycle(){
         std::vector<float> cmd = {v, w};
         this->send_cmd(cmd);
 
-        send(this->socket_fd, cmd.data(), cmd.size(), 0);
+        // Pack the data as double-precision floats
+        std::string packed_data(reinterpret_cast<const char*>(cmd.data()), cmd.size() * sizeof(double));
+
+        this->send_with_len(packed_data);
+
+        //send(this->socket_fd, cmd.data(), cmd.size(), 0);
     }
 
     this->send_camera_data(this->last_image_scan_);
