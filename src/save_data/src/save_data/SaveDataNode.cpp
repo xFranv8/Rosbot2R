@@ -1,5 +1,6 @@
 // Copyright 2023 xFranv8
 #include <vector>
+#include <utility>
 
 #include "opencv2/opencv.hpp"
 #include "cv_bridge/cv_bridge.h"
@@ -7,6 +8,8 @@
 #include "save_data/SaveDataNode.hpp"
 
 #include "sensor_msgs/msg/laser_scan.hpp"
+#include "sensor_msgs/msg/imu.hpp"
+#include "geometry_msgs/msg/twist.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -27,9 +30,9 @@ SaveDataNode::SaveDataNode() : Node("save_data") {
         "input_scan", rclcpp::SensorDataQoS(), 
         std::bind(&SaveDataNode::lidar_scan_callback, this, _1));
 
-    this->camera_scan_sub_ = image_transport::create_subscription( this, 
+    this->image_sub_ = image_transport::create_subscription( this, 
         "input_image", 
-        std::bind(&ObjectDetector::camera_scan_callback, this, _1), "raw", 
+        std::bind(&SaveDataNode::camera_scan_callback, this, _1), "raw", 
         rclcpp::SensorDataQoS().get_rmw_qos_profile());
     
     this->imu_scan_sub_ = create_subscription<sensor_msgs::msg::Imu>(
@@ -43,9 +46,9 @@ SaveDataNode::SaveDataNode() : Node("save_data") {
     this->serveraddr_in.sin_port = htons(12345);
     this->serveraddr_in.sin_addr.s_addr = inet_addr(this->server_ip);
 
-    if (connect(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+    if (connect(socket_fd, (struct sockaddr*)&server_ip, sizeof(server_ip)) < 0) {
         perror("Connection failed");
-        return 1;
+        return;
     }
 
     this->serverSock = socket(AF_INET, SOCK_STREAM, 0);
@@ -55,7 +58,7 @@ SaveDataNode::SaveDataNode() : Node("save_data") {
     
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_addr.s_addr = INADDR_ANY;
-    serverAddress.sin_port = htons(this->server_port)
+    serverAddress.sin_port = htons(this->server_port);
 
     if (bind(serverSock, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0)
         RCLCPP_ERROR(get_logger(), "Failed to bind the socket.\n");
@@ -64,7 +67,7 @@ SaveDataNode::SaveDataNode() : Node("save_data") {
         RCLCPP_ERROR(get_logger(), "Failed to listen for connections.\n");
     
     RCLCPP_ERROR(get_logger(), "Server started. Listening for incoming connections.\n");
-
+    
     sockaddr_in clientAddress{};
     socklen_t clientAddressLength = sizeof(clientAddress);
     this->clientSock = accept(serverSock, (struct sockaddr*)&clientAddress, &clientAddressLength);
@@ -102,10 +105,10 @@ void SaveDataNode::lidar_scan_callback(sensor_msgs::msg::LaserScan::UniquePtr ms
 }
 
 void SaveDataNode::imu_scan_callback(const sensor_msgs::msg::Imu::ConstSharedPtr msg){
-    this->last_lidar_scan_ = std::move(msg);
+    this->last_imu_scan_ = std::move(msg);
 }
 
-void SaveDataNode::send_lidar_data(sensor_msgs::msg::LaserScan::UniquePtr msg){
+void SaveDataNode::send_lidar_data(const sensor_msgs::msg::LaserScan::UniquePtr & msg){
     std::vector<float> ranges = msg->ranges;
     float angle_min = msg->angle_min;
     float angle_max = msg->angle_max;
@@ -116,7 +119,7 @@ void SaveDataNode::send_lidar_data(sensor_msgs::msg::LaserScan::UniquePtr msg){
        data += std::to_string(ranges[i]) + ",";
     }
 
-    data += "\n"
+    data += "\n";
     data += std::to_string(angle_min) + ",";
     data += std::to_string(angle_max);
 
@@ -129,8 +132,8 @@ void SaveDataNode::send_camera_data(cv::Mat image){
     std::vector<uchar> jpeg_data;
     cv::imencode(".jpg", image, jpeg_data);
 
-    uint32_t image_len = hton1(jpeg_data.size());
-    uint32_t network_image_len = htonl(image_len);
+    uint32_t image_len = htons(jpeg_data.size());
+    uint32_t network_image_len = htons(image_len);
 
     char buffer[4 + image_len];
     memcpy(buffer, &network_image_len, sizeof(network_image_len));
@@ -149,13 +152,13 @@ void SaveDataNode::send_imu_data(const sensor_msgs::msg::Imu::ConstSharedPtr msg
     data += std::to_string(msg->orientation.z) + ",";
     data += std::to_string(msg->orientation.w) + ",";
 
-    data += "\n"
+    data += "\n";
 
     data += std::to_string(msg->angular_velocity.x) + ",";
     data += std::to_string(msg->angular_velocity.y) + ",";
     data += std::to_string(msg->angular_velocity.z) + ",";
 
-    data += "\n"
+    data += "\n";
 
     data += std::to_string(msg->linear_acceleration.x) + ",";
     data += std::to_string(msg->linear_acceleration.y) + ",";
@@ -174,11 +177,11 @@ void SaveDataNode::send_cmd(std::vector<float> cmd){
     RCLCPP_ERROR(get_logger(), "Linear: ", motor_msg->linear.x, "\n");
     RCLCPP_ERROR(get_logger(), "Angular: ", motor_msg->angular.z, "\n");
 
-    this->publisher_->publish(*motor_msg);
+    this->vel_pub_->publish(*motor_msg);
 }
 
-void send_with_len(std::string data){
-    uint32_t data_len = hton1(data.size());
+void SaveDataNode::send_with_len(std::string data){
+    uint32_t data_len = htons(data.size());
 
     char buffer[4 + data.size()];
     memcpy(buffer, &data_len, sizeof(data_len));
@@ -188,7 +191,7 @@ void send_with_len(std::string data){
 }
 
 void SaveDataNode::control_cycle(){
-    if ((this->last_image_scan_ == nullptr) || (this->last_lidar_scan_ == nullptr) || (this->last_imu_scan_ == nullptr))
+    if ((this->last_image_scan_.data == nullptr) || (this->last_lidar_scan_ == nullptr) || (this->last_imu_scan_ == nullptr))
         return;
     
     float buffer[2];
