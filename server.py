@@ -10,35 +10,57 @@ import time
 def receive_data():
     # Set up server socket
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('10.100.14.244', 8080))  # Replace SERVER_IP with the IP address of the server
+    server_socket.bind(('10.0.81.65', 12345))  # Replace SERVER_IP with the IP address of the server
     server_socket.listen(1)
 
     # Accept client connection
     client_socket, client_address = server_socket.accept()
     print('Connected to', client_address)
 
+    print("---------------------------------------------")
+
+    buffer = b''
+
     while True:
         try:
             # Read v
-            message_len = struct.unpack('!I', client_socket.recv(4))[0]
+            """message_len = struct.unpack('!I', client_socket.recv(4))[0]
             data = client_socket.recv(message_len)
-            v = struct.unpack('dd', data)
-            print(f"Command: {v}")
+            cmd = data.decode('utf-8')
+            print(f"Command applied received from the robot: {cmd}")"""
+
+            data = client_socket.recv(1024)
+            if not data:
+                break
+            buffer += data
+
+            # Check if the received data completes the image
+            if buffer[-2:] == b'\xff\xd9':
+                # Convert the received data back to a cv2 image
+                image_array = np.frombuffer(buffer, dtype=np.uint8)
+                image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+                # Process or display the received image
+                cv2.imshow('Received Image', image)
+                cv2.waitKey(1)
+
+                # Clear the buffer for the next image
+                buffer = b''
 
             # Read image
-            message_len = struct.unpack('!I', client_socket.recv(4))[0]
+            """message_len = struct.unpack('!I', client_socket.recv(4))[0]
             data = client_socket.recv(message_len)
 
-            print(message_len)
-
             image_array = np.frombuffer(data, dtype=np.uint8)
-            image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+            image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)"""
 
-            cv2.imshow('Received Image', image)
-            cv2.waitKey(1)
+
+
+            # cv2.imshow('Received Image', image)
+            # cv2.waitKey(1)
 
             # Read lidar
-            message_len = struct.unpack('!I', client_socket.recv(4))[0]
+            """message_len = struct.unpack('!I', client_socket.recv(4))[0]
             data = client_socket.recv(message_len)
             lidar = data.decode('utf-8')
             print(f"Lidar: {lidar}")
@@ -47,13 +69,15 @@ def receive_data():
             message_len = struct.unpack('!I', client_socket.recv(4))[0]
             data = client_socket.recv(message_len)
             imu = data.decode('utf-8')
-            print(f"IMU: {imu}")
+            print(f"IMU: {imu}")"""
 
+            print("---------------------------------------------")
+            
         except Exception as e:
             print(e)
             continue
 
-        time.sleep(0.05)
+        time.sleep(0.5)
 
     cv2.destroyAllWindows()
 
@@ -82,7 +106,15 @@ def send_data():
     robot_ip: str = "10.0.74.149"  # Replace ROBOT_IP with the IP address of the robot
     robot_port: int = 6278
     robot_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    robot_socket.connect((robot_ip, robot_port))
+
+    while True:
+        try:
+            robot_socket.connect((robot_ip, robot_port))
+            break
+        except Exception as e:
+            print(e)
+            time.sleep(20)
+            continue
 
     current = time.time_ns()
 
@@ -111,15 +143,12 @@ def send_data():
             else:
                 cmd.append(0.0)
 
-            print(f"V: {cmd[0]}")
-            print(f"W: {cmd[1]}")
-
             data = struct.pack('ff', *cmd)
             robot_socket.sendall(data)
 
-            f.write(f"{cmd[0]} {cmd[1]}\n")
+            # f.write(f"{cmd[0]} {cmd[1]}\n")
 
-            time.sleep(0.058)
+            time.sleep(0.5)
 
     robot_socket.close()
 

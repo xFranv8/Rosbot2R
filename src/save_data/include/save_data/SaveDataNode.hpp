@@ -34,7 +34,7 @@ private:
     void control_cycle();
 
     void send_lidar_data(const sensor_msgs::msg::LaserScan::UniquePtr & msg);
-    void send_camera_data(cv::Mat image);
+    void send_camera_data(const cv::Mat & image);
     void send_imu_data(const sensor_msgs::msg::Imu::ConstSharedPtr msg);
 
     void send_cmd(std::vector<float> cmd);
@@ -52,7 +52,7 @@ private:
 
     int socket_fd;
     sockaddr_in serveraddr_in{};
-    const char * server_ip = "10.100.14.244";
+    const char * server_ip = "10.0.81.65";
 
     int server_port = 6278;
     int clientSock;

@@ -39,14 +39,14 @@ SaveDataNode::SaveDataNode() : Node("save_data") {
         "input_imu", rclcpp::SensorDataQoS(), 
         std::bind(&SaveDataNode::imu_scan_callback, this, _1));
     
-    this->timer_ = create_wall_timer(50ms, std::bind(&SaveDataNode::control_cycle, this));
+    this->timer_ = create_wall_timer(500ms, std::bind(&SaveDataNode::control_cycle, this));
 
     this->socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     this->serveraddr_in.sin_family = AF_INET;
     this->serveraddr_in.sin_port = htons(12345);
     this->serveraddr_in.sin_addr.s_addr = inet_addr(this->server_ip);
 
-    if (connect(socket_fd, (struct sockaddr*)&server_ip, sizeof(server_ip)) < 0) {
+    if (connect(socket_fd, (struct sockaddr*)&serveraddr_in, sizeof(serveraddr_in)) < 0) {
         perror("Connection failed");
         return;
     }
@@ -128,20 +128,16 @@ void SaveDataNode::send_lidar_data(const sensor_msgs::msg::LaserScan::UniquePtr 
     // send(this->socket_fd, data.c_str(), data.size(), 0);
 }
 
-void SaveDataNode::send_camera_data(cv::Mat image){
+void SaveDataNode::send_camera_data(const cv::Mat & image){
     std::vector<uchar> jpeg_data;
     cv::imencode(".jpg", image, jpeg_data);
 
-    uint32_t image_len = htons(jpeg_data.size());
-    uint32_t network_image_len = htons(image_len);
+    uint32_t image_len = jpeg_data.size();
 
-    char buffer[4 + image_len];
-    memcpy(buffer, &network_image_len, sizeof(network_image_len));
-    memcpy(buffer + sizeof(network_image_len), jpeg_data.data(), image_len);
+    // std::cout << "Image size: " << image_len << " bytes" << std::endl;
 
-    send(this->socket_fd, buffer, sizeof(buffer), 0);
-
-    // send(this->socket_fd, jpeg_data.data(), jpeg_data.size(), 0);
+    // send(this->socket_fd, &image_len, sizeof(image_len), 0);
+    send(this->socket_fd, jpeg_data.data(), jpeg_data.size(), 0);
 }
 
 void SaveDataNode::send_imu_data(const sensor_msgs::msg::Imu::ConstSharedPtr msg){
@@ -181,13 +177,9 @@ void SaveDataNode::send_cmd(std::vector<float> cmd){
 }
 
 void SaveDataNode::send_with_len(std::string data){
-    uint32_t data_len = htons(data.size());
+    uint32_t messageLen = data.size();
 
-    char buffer[4 + data.size()];
-    memcpy(buffer, &data_len, sizeof(data_len));
-    memcpy(buffer + sizeof(data_len), data.c_str(), data.size());
-
-    send(this->socket_fd, buffer, sizeof(buffer), 0);
+    send(this->socket_fd, data.c_str(), data.size(), 0);
 }
 
 void SaveDataNode::control_cycle(){
@@ -206,18 +198,17 @@ void SaveDataNode::control_cycle(){
         float w = buffer[1];
 
         std::vector<float> cmd = {v, w};
-        this->send_cmd(cmd);
+        // this->send_cmd(cmd);
+        char v_str = (char) v;
+        char w_str = (char) w;
 
-        // Pack the data as double-precision floats
-        std::string packed_data(reinterpret_cast<const char*>(cmd.data()), cmd.size() * sizeof(double));
+        std::string data = std::to_string(v) + ", " + std::to_string(w);
 
-        this->send_with_len(packed_data);
-
-        //send(this->socket_fd, cmd.data(), cmd.size(), 0);
+        // this->send_with_len(data);
     }
 
     this->send_camera_data(this->last_image_scan_);
-    this->send_lidar_data(this->last_lidar_scan_);
-    this->send_imu_data(this->last_imu_scan_);
+    // this->send_lidar_data(this->last_lidar_scan_);
+    // this->send_imu_data(this->last_imu_scan_);
 }
 } // namespace save_data
