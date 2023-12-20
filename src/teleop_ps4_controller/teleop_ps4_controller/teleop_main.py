@@ -1,8 +1,6 @@
 import rclpy
 
-from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.time import Time
 
 from geometry_msgs.msg import Twist
 
