@@ -1,9 +1,5 @@
 import socket
-import os
 import struct
-import time
-
-import cv2
 
 
 class ServerConnection():
@@ -11,7 +7,7 @@ class ServerConnection():
         self.__client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.__client_socket.connect((ip, port))
 
-    def send_image(self, image: cv2.Mat) -> tuple[float, float]:
+    def send_image(self, image) -> tuple[float, float]:
         image_array = image.tobytes()
 
         self.__client_socket.send(image_array)
